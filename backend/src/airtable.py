@@ -13,8 +13,12 @@ class Airtable:
 
 
     # NOTE Need to add self arg
-    def create_records(self, email:str = None):
-        if email is None:
+    # NOTE email:str = None works with "user_email": email in fields
+    # Changing to data dict param to make more robust
+    def create_records(self, data:dict) -> bool:
+        # if email is None:
+        #     return False
+        if len(data.keys()) == 0:
             return False
 
         endpoint = f"https://api.airtable.com/v0/{self.base_id}/{self.table_name}"
@@ -27,10 +31,13 @@ class Airtable:
         data = {
             "records": [
                 {
-                    "fields": {
-                        # Column names in your Airtable table
-                        "user_email": email
-                    }
+                    # Using data dict:
+                    "fields": data
+                    # Using single email field:
+                    # "fields": {
+                    #     # Column names in your Airtable table
+                    #     "user_email": data
+                    # }
                 }
             ]
         }

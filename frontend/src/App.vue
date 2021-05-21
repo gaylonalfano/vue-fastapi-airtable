@@ -145,6 +145,7 @@ export default defineComponent({
 
       // NOTE The response that comes back is determined by
       // the FastAPI endpoint operation!
+      // E.g., Return request.json() or { "result": request, "fruit": banana }, etc.
       const response = await fetch("http://localhost:8000/", {
         method: "POST",
         headers: {
@@ -160,6 +161,9 @@ export default defineComponent({
       const result = await response.json();
       console.log(result);
 
+      // NOTE 'result' depends on what I return from FastAPI endpoint
+      // E.g., If I just return result -> {email: "signup@abc.com"}
+      // E.g., If I return a dict { "result": result_json, "a": 1 } -> {result: {...}, a: 1}
       postResponse.value = result;
 
       return result;

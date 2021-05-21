@@ -6,9 +6,12 @@ from the Frontend response = await fetch()! That's how they link
 - I MUST use Request.json() to convert BYTES to JSON!
 - Request.json() returns the JSON but I can access using result['email']
 - I can access the POST Request data sent from the Frontend via Request
-- But, I can also use Pydantic models as well
+but, I can also use Pydantic models as well e.g. signup.email
+- Need to be mindful of the column names in airtable_client.create_records(data:dict)
+- NOTE 'result' depends on what I return from FastAPI endpoint
+E.g., If I just return result -> {email: "signup@abc.com"}
+E.g., If I return a dict { "result": result_json, "a": 1 } -> {result: {...}, a: 1}
 """
-from fastapi.params import Form
 import config
 import pathlib
 from fastapi import FastAPI, Request, Response
@@ -27,6 +30,9 @@ class TextArea(BaseModel):
 class User(BaseModel):
     id: int
     name: str
+
+class Signup(BaseModel):
+    email: str
 
 
 # ===== Data
@@ -160,7 +166,7 @@ async def create_user(request: Request, user: User):
 # Let's try to parse the request.body which is set inside App.vue submitForm()
 # ASYNC - WORKS!
 @app.post("/")
-async def submit_signup(request: Request):
+async def submit_signup(request: Request, signup: Signup):
     # 1. Grab the request body data
     # print(request)  # <starlette.requests.Request object at 0x110eafac0>
     # return { request.body }  # Empty...
@@ -169,6 +175,7 @@ async def submit_signup(request: Request):
     # IMPORTANT I must await since I'm using async!
     # IMPORTANT I must use json() to convert bytes to JSON!
     # NOTE The body() returns BYTES request.body():  b'{"id":"8","name":"Mickey"}'
+    # NOTE Cannot use request.dict() as dict doesn't exist on type Request
     # result = await request.body()
     result_json = await request.json()
     # print("request.body: ", request.body)  # <bound method Request.body of <starlette...>
@@ -178,20 +185,36 @@ async def submit_signup(request: Request):
     email = result_json['email']
     print("result_json['email']: ", email)  # Works!? result_json['email']:  getemail@email.com
 
+    # Q: Okay, I know now how to get email from Request. What about Pydantic model?
+    print(signup)  # email='sigupmodel@abc.com'
+    print(type(signup))  # <class 'src.main.Signup'>
+    signup_dict = signup.dict()
+    print(signup_dict)  # {'email': 'signupdictemailkey@abc.com'}
 
-    # 2. Send this data to Airtable via our Airtable client
-    # Establish connection/interface with Airtable
+    # 2. Establish connection/interface with Airtable
     airtable_client = Airtable(
         base_id=config.AIRTABLE_BASE_ID,
         api_key=config.AIRTABLE_API_KEY,
         table_name=config.AIRTABLE_TABLE_NAME
     )
-    # Push the data
-    airtable_client.create_records(email=result_json['email'])
+
+    # 3. Send this data to Airtable via our Airtable client
+    # When create_records has email param:
+    # airtable_client.create_records(email=result_json['email'])
+    # When create_records has data dict param:
+    # airtable_client.create_records(signup.dict())  # Doesn't work...
+    # airtable_client.create_records(**signup.dict())  # Doesn't work...
+    # airtable_client.create_records({"email": signup.email})  # Doesn't work...
+    # airtable_client.create_records({"email": signup_dict["email"] })  # Doesn't work...
+    # OMG! The table column name is "user_email" NOT "email"!!!
+    # airtable_client.create_records({"user_email": signup_dict["email"] })  # WORKS!
+    # airtable_client.create_records({"user_email": signup.email})  # WORKS!
+    airtable_success:bool = airtable_client.create_records({"user_email": signup.email})  # WORKS!
 
 
     # return result
-    return result_json
+    # return result_json
+    return { "result": result_json, "airtable_success": airtable_success }
 
 # SYNC - BROKEN!
 # @app.post("/")
