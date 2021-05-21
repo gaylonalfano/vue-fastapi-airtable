@@ -1,14 +1,24 @@
+"""
+NOTES:
+- Whatever you return from an API route is what is grabbed
+from the Frontend response = await fetch()! That's how they link
+- Request.body() returns BYTES
+- I MUST use Request.json() to convert BYTES to JSON!
+- Request.json() returns the JSON but I can access using result['email']
+- I can access the POST Request data sent from the Frontend via Request
+- But, I can also use Pydantic models as well
+"""
+from fastapi.params import Form
 import config
 import pathlib
-from fastapi import FastAPI, Request, Response, Form
+from fastapi import FastAPI, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse
 from pydantic import BaseModel
+from .airtable import Airtable
 
 # NOTE fastapi-airtable/backend/src/app.py
 BASE_DIR = pathlib.Path(__file__).parent  # src
 
-# print(config.AIRTABLE_API_KEY)
 
 # ===== Schemas
 class TextArea(BaseModel):
@@ -90,15 +100,25 @@ async def post_textarea(data: TextArea):
     return {**data.dict()}  # Works
 
 @app.post("/user", response_model=User)
-async def create_user(user: User):
+async def create_user(request: Request, user: User):
     # Q: Need async? Don't think so for this simple task...
+    # A: Nope, both work.
+    # Q: Can I grab the user data from the Request?
+    # NOTE Must use AWAIT with request.body()!
+    # A: Yes! Here's print:  request.body():  b'{"id":"8","name":"Mickey"}'
+    request_body = await request.body()
+    print("request.body(): ", request_body)
+
     # Let's take the User object sent in the request and append to users
     # users.append(user)  # Error! Need to convert to dict first!
     # NOTE Read more https://fastapi.tiangolo.com/tutorial/body/
     # print("type(user): ", type(user))  # <class main.User>
     user_dict = user.dict()
     users.append(user_dict)
-    return user
+    # return "Way to go!"  # CORS (because not response_model)
+    # return { "id": 100, "name": "Elon"}  # Works since it's a User model
+    # NOTE Whatever we send here is grabbed with await fetch() on Frontend!
+    return user  # Works
 
 
 # # Null/Empty
@@ -141,17 +161,37 @@ async def create_user(user: User):
 # ASYNC - WORKS!
 @app.post("/")
 async def submit_signup(request: Request):
+    # 1. Grab the request body data
     # print(request)  # <starlette.requests.Request object at 0x110eafac0>
     # return { request.body }  # Empty...
     # return request  # CORS error
     # return {"request": request}  # CORS
-    # TODO Read the Deno router.post("/launches")
-    # FIXME I MUST AWAIT SINCE I'M USING ASYNC!
-    result = await request.body()
+    # IMPORTANT I must await since I'm using async!
+    # IMPORTANT I must use json() to convert bytes to JSON!
+    # NOTE The body() returns BYTES request.body():  b'{"id":"8","name":"Mickey"}'
+    # result = await request.body()
+    result_json = await request.json()
     # print("request.body: ", request.body)  # <bound method Request.body of <starlette...>
-    print("request.body(): ", request.body())  # request.body():  <coroutine object Request.body at 0x10e7ef540>
-    print("result: ", result)
-    return result
+    # print("request.body(): ", request.body())  # request.body():  <coroutine object Request.body at 0x10e7ef540>
+    # print("result: ", result)  # result:  b'{"email":"another@alkjs.com"}'
+    print("request.json(): ", result_json)  # request.json():  {'email': 'another@abc.com'}
+    email = result_json['email']
+    print("result_json['email']: ", email)  # Works!? result_json['email']:  getemail@email.com
+
+
+    # 2. Send this data to Airtable via our Airtable client
+    # Establish connection/interface with Airtable
+    airtable_client = Airtable(
+        base_id=config.AIRTABLE_BASE_ID,
+        api_key=config.AIRTABLE_API_KEY,
+        table_name=config.AIRTABLE_TABLE_NAME
+    )
+    # Push the data
+    airtable_client.create_records(email=result_json['email'])
+
+
+    # return result
+    return result_json
 
 # SYNC - BROKEN!
 # @app.post("/")

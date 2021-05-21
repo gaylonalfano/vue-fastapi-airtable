@@ -143,6 +143,8 @@ export default defineComponent({
       console.log("submitForm");
       console.log(userEmail.value);
 
+      // NOTE The response that comes back is determined by
+      // the FastAPI endpoint operation!
       const response = await fetch("http://localhost:8000/", {
         method: "POST",
         headers: {
