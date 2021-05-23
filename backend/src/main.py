@@ -14,6 +14,10 @@ E.g., If I return a dict { "result": result_json, "a": 1 } -> {result: {...}, a:
 """
 import config
 import pathlib
+import time
+import datetime
+import pandas as pd
+import ccxt
 from fastapi import FastAPI, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
@@ -227,3 +231,32 @@ async def submit_signup(request: Request, signup: Signup):
 #     print(request.body())
 #     # return request  # CORS
 #     return request.body()  # CORS
+
+# Gonna try to see about returning a Pandas DF as JSON and exposing as a endpoint
+@app.get("/exchange")
+async def fetch_exchange_data(response: Response):
+    """Simple GET to Binance via ccxt"""
+    # def fetch_data(symbol: str, timeframe: str, limit: int) -> pd.DataFrame:
+    # 1. Grab our data
+    exchange = ccxt.binance()
+
+    # open high low close data
+    bars = exchange.fetch_ohlcv(symbol="ETH/USDT", timeframe="1d", limit=30)
+
+    # Create a DF but only with completed timestamps (ie exclude last row)
+    data = pd.DataFrame(
+        bars[:-1], columns=["timestamp", "open", "high", "low", "close", "volume"]
+    )
+
+    # Make timestamp easier to read
+    data.timestamp = pd.to_datetime(data.timestamp, unit="ms")  # 2021-05-11 23:00:00
+
+    data_json = pd.DataFrame.to_json(data)
+
+    # Q: Should I attach this data to Reponse.body?
+    # A: Works! Can do this if we wanted and adjust in Frontend's await fetch
+    response.body = data_json
+
+    # print(data.head())
+    # return data_json  # Works "{\"timestamp\": {...}}}"
+    return { "response": response, "data_json": data_json }  # Works!
